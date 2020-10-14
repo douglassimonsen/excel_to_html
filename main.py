@@ -22,13 +22,21 @@ def handle_color(color, themes):
 
 
 class ParsedCell:
-    def __init__(self, cell, wb_meta):
+    def __init__(self, cell, ws_meta):
 
         self.text = cell.value
-        self.font_style = self.handle_font_style(cell, wb_meta['themes'])
-        self.border_style = self.handle_border_style(cell, wb_meta['themes'])
-        # self.rowspan, row.colspan = self.handle_merged_cells(cell)
+        self.font_style = self.handle_font_style(cell, ws_meta['themes'])
+        self.border_style = self.handle_border_style(cell, ws_meta['themes'])
+        self.rowspan, self.colspan = self.handle_merged_cells(cell, ws_meta['merged_cell_ranges'])
 
+    @staticmethod
+    def handle_merged_cells(cell, merged_cell_ranges):
+        for merge_range in merged_cell_ranges:
+            if cell.coordinate in merge_range:
+                rowspan = merge_range.max_row - merge_range.min_row + 1
+                colspan = merge_range.max_col - merge_range.min_col + 1
+                return rowspan, colspan
+        return 1, 1
 
     @staticmethod
     def handle_border_style(cell, themes):
@@ -72,15 +80,17 @@ class ParsedCell:
 
 def main(pathname):
     wb = openpyxl.open(pathname)
-    wb_meta = {
-        'themes': color_utilities.get_theme_colors(wb)
-    }
     ws = wb['Sheet1']
+    ws_meta = {
+        'themes': color_utilities.get_theme_colors(wb),
+        'merged_cell_ranges': ws.merged_cells.ranges,
+    }
     parsed_sheet = []
     for row in list(ws.iter_rows()):
         parsed_row = []
         for cell in row:
-            parsed_row.append(ParsedCell(cell, wb_meta))
+            if isinstance(cell, openpyxl.cell.cell.Cell):
+                parsed_row.append(ParsedCell(cell, ws_meta))
         parsed_sheet.append(parsed_row)
 
 
