@@ -2,6 +2,9 @@ import openpyxl
 import static_values
 import color_utilities
 import math
+import jinja2
+# todo: allow one to select a portion of the page to convert to html
+# todo: handle case when area cuts a merged cell in half
 
 
 def handle_color(color, themes):
@@ -25,7 +28,7 @@ def handle_color(color, themes):
 class ParsedCell:
     def __init__(self, cell, ws_meta, row_idx, col_idx):
 
-        self.text = cell.value
+        self.text = cell.value or ''
         self.font_style = self.handle_font_style(cell, ws_meta['themes'])
         self.border_style = self.handle_border_style(cell, ws_meta['themes'])
         self.rowspan, self.colspan = self.handle_merged_cells(cell, ws_meta['merged_cell_ranges'])
@@ -47,16 +50,18 @@ class ParsedCell:
         if (cell.border.top == cell.border.left) and (cell.border.left == cell.border.bottom) and (cell.border.bottom == cell.border.right):  # the borders are all the same
             border = cell.border.top
             border_color = handle_color(border.color, themes)
-            border_width = static_values.border_style_to_width.get(border.style, '0px')
+            border_width = static_values.border_style_to_width.get(border.style)
             border_style = static_values.border_style_to_style.get(border.style, '0px')
-            ret['border'] = f'{border_width} {border_style} {border_color}'
+            if border_width is not None:
+                ret['border'] = f'{border_width} {border_style} {border_color}'
         else:
             for side in ['top', 'right', 'bottom', 'left']:
                 border = getattr(cell.border, side)
                 border_color = handle_color(border.color, themes)
-                border_width = static_values.border_style_to_width.get(border.style, '0px')
+                border_width = static_values.border_style_to_width.get(border.style)
                 border_style = static_values.border_style_to_style.get(border.style, '0px')
-                ret[f'border-{side}'] = f'{border_width} {border_style} {border_color}'
+                if border_width is not None:
+                    ret[f'border-{side}'] = f'{border_width} {border_style} {border_color}'
         return ret
 
     @staticmethod
@@ -80,6 +85,28 @@ class ParsedCell:
             ret['color'] = font_color
         return ret
 
+    def get_style(self):
+        style = []
+        for k, v in self.font_style.items():
+            style.append(f'{k}: {v}')
+        for k, v in self.border_style.items():
+            style.append(f'{k}: {v}')
+        return '; '.join(style)
+
+
+def to_html(parsed_sheet):  # fails with zero rows
+    return jinja2.Template('''
+        <table>
+            {% for row in parsed_sheet %}
+                <tr style="height: {{row[0].height}}">
+                    {% for cell in row %}
+                        <td style="{{cell.get_style()}}">{{cell.text}}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </table>
+    ''').render(parsed_sheet=parsed_sheet)
+
 
 def main(pathname):
     wb = openpyxl.open(pathname)
@@ -99,7 +126,9 @@ def main(pathname):
             if isinstance(cell, openpyxl.cell.cell.Cell):
                 parsed_row.append(ParsedCell(cell, ws_meta, i, j))
         parsed_sheet.append(parsed_row)
-
+    body = to_html(parsed_sheet)
+    with open('test.html', 'w') as f:
+        f.write(body)
 
 
 main("test.xlsx")
