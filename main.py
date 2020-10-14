@@ -5,6 +5,8 @@ import math
 import jinja2
 # todo: allow one to select a portion of the page to convert to html
 # todo: handle case when area cuts a merged cell in half
+# todo: default borders
+# todo: include/remove alpha channel option in handle_color
 
 
 def handle_color(color, themes):
@@ -13,14 +15,14 @@ def handle_color(color, themes):
     if color.type == 'indexed':
         if color.indexed in (64, 65):  # see COLOR_INDEX comment about 64/65
             return None
-        return '#' + static_values.COLOR_INDEX[color.indexed][2:]
+        return '#' + static_values.COLOR_INDEX[color.indexed]
     elif color.type == 'rgb':
         return '#' + color_utilities.rgb_and_tint_to_hex(color.rgb, color.tint)
     elif color.type == 'theme':
         rgb = themes[color.theme]
         return '#' + color_utilities.rgb_and_tint_to_hex(rgb, color.tint)
     elif color.type == 'auto':
-        return '#000000'
+        return '#00000000'
     else:
         return None
 
@@ -32,8 +34,10 @@ class ParsedCell:
         self.font_style = self.handle_font_style(cell, ws_meta['themes'])
         self.border_style = self.handle_border_style(cell, ws_meta['themes'])
         self.rowspan, self.colspan = self.handle_merged_cells(cell, ws_meta['merged_cell_ranges'])
-        self.width = ws_meta['column_widths'].get(col_idx, ws_meta['default_col_width'])
-        self.height = ws_meta['row_heights'].get(col_idx, ws_meta['default_row_height'])
+        self.basic_style = {
+            'width': str(ws_meta['column_widths'].get(col_idx, ws_meta['default_col_width'])) + 'px',
+            'height': str(ws_meta['row_heights'].get(row_idx, ws_meta['default_row_height'])) + 'px',
+        }
 
     @staticmethod
     def handle_merged_cells(cell, merged_cell_ranges):
@@ -49,7 +53,7 @@ class ParsedCell:
         ret = {}
         if (cell.border.top == cell.border.left) and (cell.border.left == cell.border.bottom) and (cell.border.bottom == cell.border.right):  # the borders are all the same
             border = cell.border.top
-            border_color = handle_color(border.color, themes)
+            border_color = handle_color(border.color, themes) or '#000000'
             border_width = static_values.border_style_to_width.get(border.style)
             border_style = static_values.border_style_to_style.get(border.style, '0px')
             if border_width is not None:
@@ -57,7 +61,9 @@ class ParsedCell:
         else:
             for side in ['top', 'right', 'bottom', 'left']:
                 border = getattr(cell.border, side)
-                border_color = handle_color(border.color, themes)
+                border_color = handle_color(border.color, themes) or '#000000'
+                if len(border_color) == 9:
+                    border_color = '#' + border_color[3:]
                 border_width = static_values.border_style_to_width.get(border.style)
                 border_style = static_values.border_style_to_style.get(border.style, '0px')
                 if border_width is not None:
@@ -76,9 +82,10 @@ class ParsedCell:
         ret['font-family'] = f"'{cell.font.name}'"
         ret['font-size'] = f"{cell.font.sz}px"
 
-        background_color = handle_color(cell.fill.fgColor, themes) or handle_color(cell.fill.bgColor, themes)  # foreground color will show above background, right?
-        if background_color is not None:
-            ret['background-color'] = background_color
+        if cell.fill.patternType is not None:
+            background_color = handle_color(cell.fill.fgColor, themes) or handle_color(cell.fill.bgColor, themes)  # foreground color will show above background, right?
+            if background_color is not None:
+                ret['background-color'] = background_color
 
         font_color = handle_color(cell.font.color, themes)
         if font_color is not None:
@@ -91,6 +98,8 @@ class ParsedCell:
             style.append(f'{k}: {v}')
         for k, v in self.border_style.items():
             style.append(f'{k}: {v}')
+        for k, v in self.basic_style.items():
+            style.append(f'{k}: {v}')
         return '; '.join(style)
 
 
@@ -100,7 +109,7 @@ def to_html(parsed_sheet):  # fails with zero rows
             {% for row in parsed_sheet %}
                 <tr style="height: {{row[0].height}}">
                     {% for cell in row %}
-                        <td style="{{cell.get_style()}}">{{cell.text}}</td>
+                        <td style="{{cell.get_style()}}" rowspan={{cell.rowspan}} colspan={{cell.colspan}}>{{cell.text}}</td>
                     {% endfor %}
                 </tr>
             {% endfor %}
@@ -114,7 +123,7 @@ def main(pathname):
     ws_meta = {
         'themes': color_utilities.get_theme_colors(wb),
         'merged_cell_ranges': ws.merged_cells.ranges,
-        'column_widths': {openpyxl.utils.cell.column_index_from_string(i): math.ceil(x.width * 7) for i, x in ws.column_dimensions.items()},  # converting excel units to pixels
+        'column_widths': {(openpyxl.utils.cell.column_index_from_string(i) - 1): math.ceil(x.width * 7) for i, x in ws.column_dimensions.items()},  # converting excel units to pixels
         'default_col_width': ws.sheet_format.defaultColWidth or 64,
         'row_heights': {(i - 1): x.height * (4 / 3) for i, x in ws.row_dimensions.items()},  # converting excel units to pixels
         'default_row_height': ws.sheet_format.defaultRowHeight or 20,
