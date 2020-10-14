@@ -1,6 +1,7 @@
 import openpyxl
 import static_values
 import color_utilities
+import math
 
 
 def handle_color(color, themes):
@@ -22,12 +23,14 @@ def handle_color(color, themes):
 
 
 class ParsedCell:
-    def __init__(self, cell, ws_meta):
+    def __init__(self, cell, ws_meta, row_idx, col_idx):
 
         self.text = cell.value
         self.font_style = self.handle_font_style(cell, ws_meta['themes'])
         self.border_style = self.handle_border_style(cell, ws_meta['themes'])
         self.rowspan, self.colspan = self.handle_merged_cells(cell, ws_meta['merged_cell_ranges'])
+        self.width = ws_meta['column_widths'].get(col_idx, ws_meta['default_col_width'])
+        self.height = ws_meta['row_heights'].get(col_idx, ws_meta['default_row_height'])
 
     @staticmethod
     def handle_merged_cells(cell, merged_cell_ranges):
@@ -84,13 +87,17 @@ def main(pathname):
     ws_meta = {
         'themes': color_utilities.get_theme_colors(wb),
         'merged_cell_ranges': ws.merged_cells.ranges,
+        'column_widths': {openpyxl.utils.cell.column_index_from_string(i): math.ceil(x.width * 7) for i, x in ws.column_dimensions.items()},  # converting excel units to pixels
+        'default_col_width': ws.sheet_format.defaultColWidth or 64,
+        'row_heights': {(i - 1): x.height * (4 / 3) for i, x in ws.row_dimensions.items()},  # converting excel units to pixels
+        'default_row_height': ws.sheet_format.defaultRowHeight or 20,
     }
     parsed_sheet = []
-    for row in list(ws.iter_rows()):
+    for i, row in enumerate(ws.iter_rows()):
         parsed_row = []
-        for cell in row:
+        for j, cell in enumerate(row):
             if isinstance(cell, openpyxl.cell.cell.Cell):
-                parsed_row.append(ParsedCell(cell, ws_meta))
+                parsed_row.append(ParsedCell(cell, ws_meta, i, j))
         parsed_sheet.append(parsed_row)
 
 
