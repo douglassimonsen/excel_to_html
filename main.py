@@ -3,10 +3,10 @@ import static_values
 import color_utilities
 import math
 import jinja2
-# todo: allow one to select a portion of the page to convert to html
 # todo: handle case when area cuts a merged cell in half
-# todo: default borders
 # todo: include/remove alpha channel option in handle_color
+# todo: exclude implicit borders that lines up with explicit border, otherwise they can be covered up
+# todo: fails with zero rows
 
 
 def handle_color(color, themes):
@@ -66,17 +66,25 @@ class ParsedCell:
         ret = {}
         if (cell.border.top == cell.border.left) and (cell.border.left == cell.border.bottom) and (cell.border.bottom == cell.border.right):  # the borders are all the same
             border = cell.border.top
+
             border_color = handle_color(border.color, themes) or '#000000'
+            if len(border_color) == 9:
+                border_color = '#' + border_color[3:]
+
             border_width = static_values.border_style_to_width.get(border.style)
             border_style = static_values.border_style_to_style.get(border.style, '0px')
             if border_width is not None:
                 ret['border'] = f'{border_width} {border_style} {border_color}'
+            else:
+                ret['border'] = '1px solid #D9D9D9'
         else:
             for side in ['top', 'right', 'bottom', 'left']:
                 border = getattr(cell.border, side)
+
                 border_color = handle_color(border.color, themes) or '#000000'
                 if len(border_color) == 9:
                     border_color = '#' + border_color[3:]
+
                 border_width = static_values.border_style_to_width.get(border.style)
                 border_style = static_values.border_style_to_style.get(border.style, '0px')
                 if border_width is not None:
@@ -116,9 +124,9 @@ class ParsedCell:
         return '; '.join(style)
 
 
-def to_html(parsed_sheet):  # fails with zero rows
+def to_html(parsed_sheet):
     return jinja2.Template('''
-        <table>
+        <table style="border-collapse:collapse">
             {% for row in parsed_sheet %}
                 <tr style="height: {{row[0].height}}">
                     {% for cell in row %}
@@ -132,7 +140,7 @@ def to_html(parsed_sheet):  # fails with zero rows
     ''').render(parsed_sheet=parsed_sheet)
 
 
-def main(pathname):
+def main(pathname, min_row=None, max_row=None, min_col=None, max_col=None):
     wb = openpyxl.open(pathname)
     ws = wb['Sheet1']
     ws_meta = {
@@ -144,7 +152,7 @@ def main(pathname):
         'default_row_height': ws.sheet_format.defaultRowHeight or 20,
     }
     parsed_sheet = []
-    for i, row in enumerate(ws.iter_rows()):
+    for i, row in enumerate(ws.iter_rows(min_row=min_row, max_row=max_row, min_col=min_col, max_col=max_col)):
         parsed_row = []
         for j, cell in enumerate(row):
             if isinstance(cell, openpyxl.cell.cell.Cell):
@@ -156,4 +164,4 @@ def main(pathname):
     return body
 
 
-main("test.xlsx")
+main("test.xlsx", min_row=4)
