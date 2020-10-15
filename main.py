@@ -34,10 +34,23 @@ class ParsedCell:
         self.font_style = self.handle_font_style(cell, ws_meta['themes'])
         self.border_style = self.handle_border_style(cell, ws_meta['themes'])
         self.rowspan, self.colspan = self.handle_merged_cells(cell, ws_meta['merged_cell_ranges'])
-        self.basic_style = {
-            'width': str(ws_meta['column_widths'].get(col_idx, ws_meta['default_col_width'])) + 'px',
-            'height': str(ws_meta['row_heights'].get(row_idx, ws_meta['default_row_height'])) + 'px',
-        }
+
+        self.sizing_style = self.handle_sizing(cell, ws_meta, row_idx, col_idx)
+
+    @staticmethod
+    def handle_sizing(cell, ws_meta, row_idx, col_idx):
+        ret = {}
+        width = ws_meta['column_widths'].get(col_idx, ws_meta['default_col_width'])
+        height = ws_meta['row_heights'].get(row_idx, ws_meta['default_row_height'])
+        ret['width'] = str(width) + 'px'
+        ret['height'] = str(height) + 'px'
+        horizontal = cell.alignment.horizontal or 'left'
+        vertical = cell.alignment.vertical or 'bottom'
+        if vertical == 'center':
+            vertical = 'middle'
+        ret['text-align'] = horizontal
+        ret['vertical-align'] = vertical
+        return ret
 
     @staticmethod
     def handle_merged_cells(cell, merged_cell_ranges):
@@ -98,7 +111,7 @@ class ParsedCell:
             style.append(f'{k}: {v}')
         for k, v in self.border_style.items():
             style.append(f'{k}: {v}')
-        for k, v in self.basic_style.items():
+        for k, v in self.sizing_style.items():
             style.append(f'{k}: {v}')
         return '; '.join(style)
 
@@ -109,7 +122,9 @@ def to_html(parsed_sheet):  # fails with zero rows
             {% for row in parsed_sheet %}
                 <tr style="height: {{row[0].height}}">
                     {% for cell in row %}
-                        <td style="{{cell.get_style()}}" rowspan={{cell.rowspan}} colspan={{cell.colspan}}>{{cell.text}}</td>
+                        <td style="{{cell.get_style()}}" rowspan={{cell.rowspan}} colspan={{cell.colspan}}>
+                            {{cell.text}}
+                        </td>
                     {% endfor %}
                 </tr>
             {% endfor %}
@@ -138,6 +153,7 @@ def main(pathname):
     body = to_html(parsed_sheet)
     with open('test.html', 'w') as f:
         f.write(body)
+    return body
 
 
 main("test.xlsx")
