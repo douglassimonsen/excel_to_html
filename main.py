@@ -3,8 +3,9 @@ import static_values
 import color_utilities
 import math
 import jinja2
-# todo: handle case when area cuts a merged cell in half
+
 # todo: border and merged cells probaly don't work well
+# todo: make hyperlinks show up as <a> elements
 
 
 def handle_color(color, themes, alpha=False):
@@ -34,7 +35,7 @@ class ParsedCell:
         self.text = cell.value or ''
         self.font_style = self.handle_font_style(cell, ws_meta['themes'])
         self.border_style, self.default_border = self.handle_border_style(cell, ws_meta['themes'])
-        self.rowspan, self.colspan = self.handle_merged_cells(cell, ws_meta['merged_cell_ranges'])
+        self.rowspan, self.colspan = self.handle_merged_cells(cell, ws_meta)
         self.row_idx = row_idx
         self.col_idx = col_idx
         self.sizing_style = self.handle_sizing(cell, ws_meta, row_idx, col_idx, self.rowspan, self.colspan)
@@ -59,11 +60,13 @@ class ParsedCell:
         return ret
 
     @staticmethod
-    def handle_merged_cells(cell, merged_cell_ranges):
-        for merge_range in merged_cell_ranges:
+    def handle_merged_cells(cell, ws_meta):
+        def clamp_to_window(v, direction):
+            return max(ws_meta[f'min_{direction}'], min(v, ws_meta[f'max_{direction}']))
+        for merge_range in ws_meta['merged_cell_ranges']:
             if cell.coordinate in merge_range:
-                rowspan = merge_range.max_row - merge_range.min_row + 1
-                colspan = merge_range.max_col - merge_range.min_col + 1
+                rowspan = clamp_to_window(merge_range.max_row, 'row') - clamp_to_window(merge_range.min_row, 'row') + 1
+                colspan = clamp_to_window(merge_range.max_col, 'col') - clamp_to_window(merge_range.min_col, 'col') + 1
                 return rowspan, colspan
         return 1, 1
 
@@ -196,6 +199,10 @@ def fix_background_color(sheet_cells):
 
 
 def main(pathname, sheetname='Sheet1', min_row=None, max_row=None, min_col=None, max_col=None, openpyxl_kwargs={}):
+    def out_of_range(bounds):
+        '''bounds are of the form (left_col, top_row, right_col, bottom_row)'''
+        return (bounds[0] < (min_col or 0)) or (bounds[1] < (min_row or 0))
+
     wb = openpyxl.open(pathname, **openpyxl_kwargs)
     ws = wb[sheetname]
     ws_meta = {
@@ -205,13 +212,25 @@ def main(pathname, sheetname='Sheet1', min_row=None, max_row=None, min_col=None,
         'default_col_width': ws.sheet_format.defaultColWidth or 64,
         'row_heights': {(i - 1): x.height * (4 / 3) for i, x in ws.row_dimensions.items()},  # converting excel units to pixels
         'default_row_height': ws.sheet_format.defaultRowHeight or 20,
+        'min_row': min_row or 1,
+        'min_col': min_col or 1,
+        'max_row': min(max_row or ws.max_row, ws.max_row),
+        'max_col': min(max_col or ws.max_column, ws.max_column),
     }
     parsed_sheet = []
+    candidate_merge_ranges = [x for x in ws.merged_cell_ranges if out_of_range(x.bounds)]
     for i, row in enumerate(ws.iter_rows(min_row=min_row, max_row=max_row, min_col=min_col, max_col=max_col)):
         parsed_row = []
         for j, cell in enumerate(row):
             if isinstance(cell, openpyxl.cell.cell.Cell):
                 parsed_row.append(ParsedCell(cell, ws_meta, i, j))
+            else:
+                for i, candidate_range in enumerate(candidate_merge_ranges):
+                    if cell.coordinate in candidate_range:
+                        parent_cell = ws.cell(row=candidate_range.bounds[1], column=candidate_range.bounds[0])
+                        parsed_row.append(ParsedCell(parent_cell, ws_meta, i, j))
+                        candidate_merge_ranges.pop(i)
+                        break
         parsed_sheet.append(parsed_row)
 
     # it's important to first run background_color and then fix_borders, so that
@@ -227,4 +246,4 @@ def main(pathname, sheetname='Sheet1', min_row=None, max_row=None, min_col=None,
     return body
 
 
-main("test2.xlsx", min_row=4)
+main("test2.xlsx", min_row=4, max_col=4)
