@@ -5,7 +5,6 @@ import math
 import jinja2
 # todo: handle case when area cuts a merged cell in half
 # todo: fails with zero rows
-# todo: background-color should make default borders disappear
 # todo: border and merged cells probaly don't work well
 
 
@@ -33,7 +32,6 @@ def handle_color(color, themes, alpha=False):
 
 class ParsedCell:
     def __init__(self, cell, ws_meta, row_idx, col_idx):
-
         self.text = cell.value or ''
         self.font_style = self.handle_font_style(cell, ws_meta['themes'])
         self.border_style, self.default_border = self.handle_border_style(cell, ws_meta['themes'])
@@ -146,17 +144,21 @@ def to_html(parsed_sheet):
     ''').render(parsed_sheet=parsed_sheet)
 
 
-def fix_borders(sheet_cells, ws_meta):
-    def delete_side(cell, del_side):
-        if cell is None:  # probably a merged cell or the edge of the sheet
-            return
-        if cell.default_border[del_side] is True:
-            if 'border' in cell.border_style:  # we need to convert border to individual border sides to delete one of them
-                del cell.border_style['border']
-                for side in static_values.BORDER_SIDES:
-                    cell.border_style[f'border-{side}'] = static_values.DEFAULT_BORDER
-            del cell.border_style[f'border-{del_side}']
+def delete_side(cell, del_side):
+    if cell is None:  # probably a merged cell or the edge of the sheet
+        return
 
+    if cell.default_border[del_side] is True:
+        if 'border' in cell.border_style:  # we need to convert border to individual border sides to delete one of them
+            del cell.border_style['border']
+            for side in static_values.BORDER_SIDES:
+                cell.border_style[f'border-{side}'] = static_values.DEFAULT_BORDER
+
+        del cell.border_style[f'border-{del_side}']
+        cell.default_border[del_side] = False
+
+
+def fix_borders(sheet_cells, ws_meta):
     """
     makes sure that explicitly set borders are not overwritten by default borders
     """
@@ -166,8 +168,8 @@ def fix_borders(sheet_cells, ws_meta):
             cell_dict[(cell.row_idx, cell.col_idx)] = cell
     for row in sheet_cells:
         for cell in row:
-            for side, default in cell.default_border.items():
-                if default is False:
+            for side, is_default in cell.default_border.items():
+                if is_default is False:
                     if side == 'top':
                         delete_side(cell_dict.get((cell.row_idx - 1, cell.col_idx)), 'bottom')
                     if side == 'right':
@@ -176,6 +178,18 @@ def fix_borders(sheet_cells, ws_meta):
                         delete_side(cell_dict.get((cell.row_idx + 1, cell.col_idx)), 'top')
                     if side == 'left':
                         delete_side(cell_dict.get((cell.row_idx, cell.col_idx - 1)), 'right')
+
+
+def fix_background_color(sheet_cells):
+    """
+    In an excel, a colored background hides the default border
+    """
+    for row in sheet_cells:
+        for cell in row:
+            if cell.font_style.get('background-color') is not None:
+                for side, is_default in cell.default_border.items():
+                    if is_default:
+                        delete_side(cell, side)
 
 
 def main(pathname, sheetname='Sheet1', min_row=None, max_row=None, min_col=None, max_col=None, openpyxl_kwargs={}):
@@ -196,6 +210,13 @@ def main(pathname, sheetname='Sheet1', min_row=None, max_row=None, min_col=None,
             if isinstance(cell, openpyxl.cell.cell.Cell):
                 parsed_row.append(ParsedCell(cell, ws_meta, i, j))
         parsed_sheet.append(parsed_row)
+
+    # it's important to first run background_color and then fix_borders, so that
+    # the border can be deleted on the cell in fix_background_color. Then you
+    # need to run fix_borders so their neighbors can also have their borders
+    # deleted. That's part of the reason we make default_border = False when
+    # running delete_side
+    fix_background_color(parsed_sheet)
     fix_borders(parsed_sheet, ws_meta)
     body = to_html(parsed_sheet)
     with open('test.html', 'w') as f:
