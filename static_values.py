@@ -44,3 +44,5 @@ border_style_to_style = {
     'thick': 'solid',
     'thin': 'solid',
 }
+DEFAULT_BORDER = '1px solid #D9D9D9'
+BORDER_SIDES = ['top', 'right', 'bottom', 'left']

@@ -4,9 +4,9 @@ import color_utilities
 import math
 import jinja2
 # todo: handle case when area cuts a merged cell in half
-# todo: include/remove alpha channel option in handle_color
-# todo: exclude implicit borders that lines up with explicit border, otherwise they can be covered up
 # todo: fails with zero rows
+# todo: background-color should make default borders disappear
+# todo: border and merged cells probaly don't work well
 
 
 def handle_color(color, themes, alpha=False):
@@ -36,9 +36,10 @@ class ParsedCell:
 
         self.text = cell.value or ''
         self.font_style = self.handle_font_style(cell, ws_meta['themes'])
-        self.border_style = self.handle_border_style(cell, ws_meta['themes'])
+        self.border_style, self.default_border = self.handle_border_style(cell, ws_meta['themes'])
         self.rowspan, self.colspan = self.handle_merged_cells(cell, ws_meta['merged_cell_ranges'])
-
+        self.row_idx = row_idx
+        self.col_idx = col_idx
         self.sizing_style = self.handle_sizing(cell, ws_meta, row_idx, col_idx)
 
     @staticmethod
@@ -68,6 +69,7 @@ class ParsedCell:
     @staticmethod
     def handle_border_style(cell, themes):
         ret = {}
+        default_border = {k: False for k in static_values.BORDER_SIDES}
         if (cell.border.top == cell.border.left) and (cell.border.left == cell.border.bottom) and (cell.border.bottom == cell.border.right):  # the borders are all the same
             border = cell.border.top
 
@@ -78,9 +80,10 @@ class ParsedCell:
             if border_width is not None:
                 ret['border'] = f'{border_width} {border_style} {border_color}'
             else:
-                ret['border'] = '1px solid #D9D9D9'
+                ret['border'] = static_values.DEFAULT_BORDER
+                default_border = {k: True for k in static_values.BORDER_SIDES}
         else:
-            for side in ['top', 'right', 'bottom', 'left']:
+            for side in static_values.BORDER_SIDES:
                 border = getattr(cell.border, side)
 
                 border_color = handle_color(border.color, themes) or '#000000'
@@ -89,7 +92,10 @@ class ParsedCell:
                 border_style = static_values.border_style_to_style.get(border.style, '0px')
                 if border_width is not None:
                     ret[f'border-{side}'] = f'{border_width} {border_style} {border_color}'
-        return ret
+                else:
+                    ret[f'border-{side}'] = static_values.DEFAULT_BORDER
+                    default_border[side] = True
+        return ret, default_border
 
     @staticmethod
     def handle_font_style(cell, themes):
@@ -140,9 +146,41 @@ def to_html(parsed_sheet):
     ''').render(parsed_sheet=parsed_sheet)
 
 
-def main(pathname, min_row=None, max_row=None, min_col=None, max_col=None, openpyxl_kwargs={}):
+def fix_borders(sheet_cells, ws_meta):
+    def delete_side(cell, del_side):
+        if cell is None:  # probably a merged cell or the edge of the sheet
+            return
+        if cell.default_border[del_side] is True:
+            if 'border' in cell.border_style:  # we need to convert border to individual border sides to delete one of them
+                del cell.border_style['border']
+                for side in static_values.BORDER_SIDES:
+                    cell.border_style[f'border-{side}'] = static_values.DEFAULT_BORDER
+            del cell.border_style[f'border-{del_side}']
+
+    """
+    makes sure that explicitly set borders are not overwritten by default borders
+    """
+    cell_dict = {}
+    for row in sheet_cells:
+        for cell in row:
+            cell_dict[(cell.row_idx, cell.col_idx)] = cell
+    for row in sheet_cells:
+        for cell in row:
+            for side, default in cell.default_border.items():
+                if default is False:
+                    if side == 'top':
+                        delete_side(cell_dict.get((cell.row_idx - 1, cell.col_idx)), 'bottom')
+                    if side == 'right':
+                        delete_side(cell_dict.get((cell.row_idx, cell.col_idx + 1)), 'left')
+                    if side == 'bottom':
+                        delete_side(cell_dict.get((cell.row_idx + 1, cell.col_idx)), 'top')
+                    if side == 'left':
+                        delete_side(cell_dict.get((cell.row_idx, cell.col_idx - 1)), 'right')
+
+
+def main(pathname, sheetname='Sheet1', min_row=None, max_row=None, min_col=None, max_col=None, openpyxl_kwargs={}):
     wb = openpyxl.open(pathname, **openpyxl_kwargs)
-    ws = wb['Sheet1']
+    ws = wb[sheetname]
     ws_meta = {
         'themes': color_utilities.get_theme_colors(wb),
         'merged_cell_ranges': ws.merged_cells.ranges,
@@ -158,10 +196,11 @@ def main(pathname, min_row=None, max_row=None, min_col=None, max_col=None, openp
             if isinstance(cell, openpyxl.cell.cell.Cell):
                 parsed_row.append(ParsedCell(cell, ws_meta, i, j))
         parsed_sheet.append(parsed_row)
+    fix_borders(parsed_sheet, ws_meta)
     body = to_html(parsed_sheet)
     with open('test.html', 'w') as f:
         f.write(body)
     return body
 
 
-main("test.xlsx", min_row=4)
+main("test.xlsx")
