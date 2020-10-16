@@ -4,9 +4,6 @@ import color_utilities
 import math
 import jinja2
 
-# todo: border and merged cells probaly don't work well
-# todo: make hyperlinks show up as <a> elements
-
 
 def handle_color(color, themes, alpha=False):
     if color is None:
@@ -18,8 +15,11 @@ def handle_color(color, themes, alpha=False):
     elif color.type == 'rgb':
         color = '00' + color_utilities.rgb_and_tint_to_hex(color.rgb, color.tint)
     elif color.type == 'theme':
-        rgb = themes[color.theme]
-        color = '00' + color_utilities.rgb_and_tint_to_hex(rgb, color.tint)
+        if color.theme < len(themes):
+            rgb = themes[color.theme]
+            color = '00' + color_utilities.rgb_and_tint_to_hex(rgb, color.tint)
+        else:
+            color = '00000000'
     elif color.type == 'auto':
         color = '00000000'
     else:
@@ -33,6 +33,7 @@ def handle_color(color, themes, alpha=False):
 class ParsedCell:
     def __init__(self, cell, ws_meta, row_idx, col_idx):
         self.text = cell.value or ''
+        self.hyperlink = self.handle_hyperlink(cell)
         self.font_style = self.handle_font_style(cell, ws_meta['themes'])
         self.border_style, self.default_border = self.handle_border_style(cell, ws_meta['themes'])
         self.rowspan, self.colspan = self.handle_merged_cells(cell, ws_meta)
@@ -41,13 +42,19 @@ class ParsedCell:
         self.sizing_style = self.handle_sizing(cell, ws_meta, row_idx, col_idx, self.rowspan, self.colspan)
 
     @staticmethod
+    def handle_hyperlink(cell):
+        if cell.hyperlink is None:
+            return None
+        return cell.hyperlink.target
+
+    @staticmethod
     def handle_sizing(cell, ws_meta, row_idx, col_idx, rowspan, colspan):
         ret = {}
         width = 0
         for col in range(col_idx, col_idx + colspan):
             width += ws_meta['column_widths'].get(col_idx, ws_meta['default_col_width'])
         height = 0
-        for row in range(row_idx, rowspan):
+        for row in range(row_idx, row_idx + rowspan):
             height += ws_meta['row_heights'].get(row_idx, ws_meta['default_row_height'])
         ret['width'] = str(width) + 'px'
         ret['height'] = str(height) + 'px'
@@ -140,14 +147,20 @@ def to_html(parsed_sheet):
             {% for row in parsed_sheet %}
                 <tr style="height: {{row[0].height}}">
                     {% for cell in row %}
-                        <td style="{{cell.get_style()}}" rowspan={{cell.rowspan}} colspan={{cell.colspan}}>
-                            {{cell.text}}
-                        </td>
+                        {% if cell.hyperlink is none %}
+                            <td style="{{cell.get_style()}}" rowspan={{cell.rowspan}} colspan={{cell.colspan}}>
+                                {{cell.text}}
+                            </td>
+                        {% else %}
+                            <td style="{{cell.get_style()}}" rowspan={{cell.rowspan}} colspan={{cell.colspan}}>
+                                <a href="{{cell.hyperlink}}">{{cell.text}}</a>
+                            </td>
+                        {% endif %}
                     {% endfor %}
                 </tr>
             {% endfor %}
         </table>
-    ''').render(parsed_sheet=parsed_sheet)
+    ''').render(parsed_sheet=parsed_sheet, none=None)
 
 
 def delete_side(cell, del_side):
@@ -246,4 +259,4 @@ def main(pathname, sheetname='Sheet1', min_row=None, max_row=None, min_col=None,
     return body
 
 
-main("test2.xlsx", min_row=4, max_col=4)
+main("test.xlsx", min_row=0, max_col=4)
