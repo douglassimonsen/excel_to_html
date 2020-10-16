@@ -9,22 +9,26 @@ import jinja2
 # todo: fails with zero rows
 
 
-def handle_color(color, themes):
+def handle_color(color, themes, alpha=False):
     if color is None:
         return None
     if color.type == 'indexed':
         if color.indexed in (64, 65):  # see COLOR_INDEX comment about 64/65
             return None
-        return '#' + static_values.COLOR_INDEX[color.indexed]
+        color = static_values.COLOR_INDEX[color.indexed]
     elif color.type == 'rgb':
-        return '#' + color_utilities.rgb_and_tint_to_hex(color.rgb, color.tint)
+        color = '00' + color_utilities.rgb_and_tint_to_hex(color.rgb, color.tint)
     elif color.type == 'theme':
         rgb = themes[color.theme]
-        return '#' + color_utilities.rgb_and_tint_to_hex(rgb, color.tint)
+        color = '00' + color_utilities.rgb_and_tint_to_hex(rgb, color.tint)
     elif color.type == 'auto':
-        return '#00000000'
+        color = '00000000'
     else:
         return None
+
+    if not alpha:
+        color = color[2:]
+    return '#' + color
 
 
 class ParsedCell:
@@ -68,8 +72,6 @@ class ParsedCell:
             border = cell.border.top
 
             border_color = handle_color(border.color, themes) or '#000000'
-            if len(border_color) == 9:
-                border_color = '#' + border_color[3:]
 
             border_width = static_values.border_style_to_width.get(border.style)
             border_style = static_values.border_style_to_style.get(border.style, '0px')
@@ -82,8 +84,6 @@ class ParsedCell:
                 border = getattr(cell.border, side)
 
                 border_color = handle_color(border.color, themes) or '#000000'
-                if len(border_color) == 9:
-                    border_color = '#' + border_color[3:]
 
                 border_width = static_values.border_style_to_width.get(border.style)
                 border_style = static_values.border_style_to_style.get(border.style, '0px')
@@ -140,8 +140,8 @@ def to_html(parsed_sheet):
     ''').render(parsed_sheet=parsed_sheet)
 
 
-def main(pathname, min_row=None, max_row=None, min_col=None, max_col=None):
-    wb = openpyxl.open(pathname)
+def main(pathname, min_row=None, max_row=None, min_col=None, max_col=None, openpyxl_kwargs={}):
+    wb = openpyxl.open(pathname, **openpyxl_kwargs)
     ws = wb['Sheet1']
     ws_meta = {
         'themes': color_utilities.get_theme_colors(wb),
