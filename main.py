@@ -4,7 +4,6 @@ import color_utilities
 import math
 import jinja2
 # todo: handle case when area cuts a merged cell in half
-# todo: fails with zero rows
 # todo: border and merged cells probaly don't work well
 
 
@@ -38,13 +37,17 @@ class ParsedCell:
         self.rowspan, self.colspan = self.handle_merged_cells(cell, ws_meta['merged_cell_ranges'])
         self.row_idx = row_idx
         self.col_idx = col_idx
-        self.sizing_style = self.handle_sizing(cell, ws_meta, row_idx, col_idx)
+        self.sizing_style = self.handle_sizing(cell, ws_meta, row_idx, col_idx, self.rowspan, self.colspan)
 
     @staticmethod
-    def handle_sizing(cell, ws_meta, row_idx, col_idx):
+    def handle_sizing(cell, ws_meta, row_idx, col_idx, rowspan, colspan):
         ret = {}
-        width = ws_meta['column_widths'].get(col_idx, ws_meta['default_col_width'])
-        height = ws_meta['row_heights'].get(row_idx, ws_meta['default_row_height'])
+        width = 0
+        for col in range(col_idx, col_idx + colspan):
+            width += ws_meta['column_widths'].get(col_idx, ws_meta['default_col_width'])
+        height = 0
+        for row in range(row_idx, rowspan):
+            height += ws_meta['row_heights'].get(row_idx, ws_meta['default_row_height'])
         ret['width'] = str(width) + 'px'
         ret['height'] = str(height) + 'px'
         horizontal = cell.alignment.horizontal or 'left'
@@ -224,4 +227,4 @@ def main(pathname, sheetname='Sheet1', min_row=None, max_row=None, min_col=None,
     return body
 
 
-main("test.xlsx")
+main("test2.xlsx", min_row=4)
