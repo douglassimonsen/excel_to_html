@@ -171,21 +171,17 @@ class ParsedCell:
 def to_html(parsed_sheet: List[List[ParsedCell]]):
     return jinja2.Template('''
         <table style="border-collapse:collapse">
-            {% for row in parsed_sheet %}
+            {%- for row in parsed_sheet -%}
                 <tr style="height: {{row[0].height}}">
-                    {% for cell in row %}
-                        {% if cell.hyperlink is none %}
-                            <td style="{{cell.get_style()}}" rowspan={{cell.rowspan}} colspan={{cell.colspan}}>
-                                {{cell.text}}
-                            </td>
-                        {% else %}
-                            <td style="{{cell.get_style()}}" rowspan={{cell.rowspan}} colspan={{cell.colspan}}>
-                                <a href="{{cell.hyperlink}}">{{cell.text}}</a>
-                            </td>
-                        {% endif %}
-                    {% endfor %}
+                    {%- for cell in row -%}
+                        {%- if cell.hyperlink is none -%}
+                            <td style="{{cell.get_style()}}" rowspan={{cell.rowspan}} colspan={{cell.colspan}}>{{cell.text}}</td>
+                        {%- else -%}
+                            <td style="{{cell.get_style()}}" rowspan={{cell.rowspan}} colspan={{cell.colspan}}><a href="{{cell.hyperlink}}">{{cell.text}}</a></td>
+                        {%- endif -%}
+                    {%- endfor -%}
                 </tr>
-            {% endfor %}
+            {%- endfor -%}
         </table>
     ''').render(parsed_sheet=parsed_sheet, none=None)
 
