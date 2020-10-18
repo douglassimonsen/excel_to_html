@@ -31,3 +31,5 @@ main(
   }
 )
 ```
+<img src="https://github.com/mwhamilton/excel_to_html/raw/master/excel_example.PNG" alt="Input Excel" width="45%"></img>
+<img src="https://github.com/mwhamilton/excel_to_html/raw/master/html_example.PNG" alt="Ouput HTML" width="45%"></img>
