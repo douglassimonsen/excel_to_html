@@ -211,12 +211,13 @@ def fix_background_color(sheet_cells):
                         delete_side(cell, side)
 
 
-def main(pathname, sheetname='Sheet1', min_row=None, max_row=None, min_col=None, max_col=None, openpyxl_kwargs={}):
+def main(pathname, sheetname='Sheet1', min_row=None, max_row=None, min_col=None, max_col=None, openpyxl_kwargs=None):
     def out_of_range(bounds):
         '''bounds are of the form (left_col, top_row, right_col, bottom_row)'''
         return (bounds[0] < (min_col or 0)) or (bounds[1] < (min_row or 0))
 
-    wb = openpyxl.open(pathname, **openpyxl_kwargs)
+    openpyxl_kwargs = openpyxl_kwargs or {}  # just in case people are mutating openpyxl_kwargs between calls.
+    wb = openpyxl.load_workbook(pathname, **openpyxl_kwargs)
     ws = wb[sheetname]
     ws_meta = {
         'themes': color_utilities.get_theme_colors(wb),
