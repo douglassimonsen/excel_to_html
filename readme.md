@@ -10,6 +10,7 @@ If you use Outlook and you'd like a simple tool to send automatic emails, check 
 * Similarly, in order to maximize portability and to simplify the first implementation, all styles are inlined. I expect to add the option to return a seperate CSS string and to reduce styles to classes.
 * Edges cases for borders, such as a merged cell having multiple border-styles on a single edge are not replicated.
 * I assume that the default borders (the light grey lines you see on a blank sheet) should be seen. Editing `static_values.DEFAULT_BORDER` can change it to be invisible.
+* If a merged cell has a border that is outside of the viewing window, that border still appears.
 
 ## Details
 The program contains a single function designed for public consumption:
@@ -23,11 +24,13 @@ main(
   'test.xlsx',
   sheetname='Sheet1',
   min_row=0,
-  max_row=3,
-  min_col=1,
-  max_col=None,
+  max_col=4,  # this will cut the merged cell in half!
   openpyxl_kwargs={
       'data_only': True,  # converts formulas to their values
   }
 )
 ```
+Input and output for the above function:
+
+<img src="https://github.com/mwhamilton/excel_to_html/raw/master/excel_example.PNG" alt="Input Excel" width="45%"></img>
+<img src="https://github.com/mwhamilton/excel_to_html/raw/master/html_example.PNG" alt="Ouput HTML" width="45%"></img>
