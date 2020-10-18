@@ -3,9 +3,14 @@ import static_values
 import color_utilities
 import math
 import jinja2
+from typing import Dict, List
 
 
-def handle_color(color, themes, alpha=False):
+def handle_color(
+    color: openpyxl.styles.colors.Color,
+    themes: List[str],
+    alpha: bool=False
+):
     if color is None:
         return None
     if color.type == 'indexed':
@@ -31,7 +36,13 @@ def handle_color(color, themes, alpha=False):
 
 
 class ParsedCell:
-    def __init__(self, cell, ws_meta, row_idx, col_idx):
+    def __init__(
+        self,
+        cell: openpyxl.styles.colors.Color,
+        ws_meta: Dict,
+        row_idx: int,
+        col_idx: int
+    ):
         self.text = cell.value or ''
         self.hyperlink = self.handle_hyperlink(cell)
         self.font_style = self.handle_font_style(cell, ws_meta['themes'])
@@ -42,13 +53,20 @@ class ParsedCell:
         self.sizing_style = self.handle_sizing(cell, ws_meta, row_idx, col_idx, self.rowspan, self.colspan)
 
     @staticmethod
-    def handle_hyperlink(cell):
+    def handle_hyperlink(cell: openpyxl.styles.colors.Color):
         if cell.hyperlink is None:
             return None
         return cell.hyperlink.target
 
     @staticmethod
-    def handle_sizing(cell, ws_meta, row_idx, col_idx, rowspan, colspan):
+    def handle_sizing(
+        cell: openpyxl.styles.colors.Color,
+        ws_meta: Dict,
+        row_idx: int,
+        col_idx: int,
+        rowspan: int,
+        colspan: int
+    ):
         ret = {}
         width = 0
         for col in range(col_idx, col_idx + colspan):
@@ -67,7 +85,10 @@ class ParsedCell:
         return ret
 
     @staticmethod
-    def handle_merged_cells(cell, ws_meta):
+    def handle_merged_cells(
+        cell: openpyxl.styles.colors.Color,
+        ws_meta: Dict
+    ):
         def clamp_to_window(v, direction):
             return max(ws_meta[f'min_{direction}'], min(v, ws_meta[f'max_{direction}']))
         for merge_range in ws_meta['merged_cell_ranges']:
@@ -78,7 +99,10 @@ class ParsedCell:
         return 1, 1
 
     @staticmethod
-    def handle_border_style(cell, themes):
+    def handle_border_style(
+        cell: openpyxl.styles.colors.Color,
+        themes: List[str]
+    ):
         ret = {}
         default_border = {k: False for k in static_values.BORDER_SIDES}
         if (cell.border.top == cell.border.left) and (cell.border.left == cell.border.bottom) and (cell.border.bottom == cell.border.right):  # the borders are all the same
@@ -109,7 +133,10 @@ class ParsedCell:
         return ret, default_border
 
     @staticmethod
-    def handle_font_style(cell, themes):
+    def handle_font_style(
+        cell: openpyxl.styles.colors.Color,
+        themes: List[str]
+    ):
         ret = {}
         if cell.font.i:  # italics
             ret['font-style'] = 'italic'
@@ -141,7 +168,7 @@ class ParsedCell:
         return '; '.join(style)
 
 
-def to_html(parsed_sheet):
+def to_html(parsed_sheet: List[List[ParsedCell]]):
     return jinja2.Template('''
         <table style="border-collapse:collapse">
             {% for row in parsed_sheet %}
@@ -163,7 +190,7 @@ def to_html(parsed_sheet):
     ''').render(parsed_sheet=parsed_sheet, none=None)
 
 
-def delete_side(cell, del_side):
+def delete_side(cell: openpyxl.styles.colors.Color, del_side: str):
     if cell is None:  # probably a merged cell or the edge of the sheet
         return
 
@@ -177,7 +204,7 @@ def delete_side(cell, del_side):
         cell.default_border[del_side] = False
 
 
-def fix_borders(sheet_cells, ws_meta):
+def fix_borders(sheet_cells: List[List[ParsedCell]], ws_meta: Dict):
     """
     makes sure that explicitly set borders are not overwritten by default borders
     """
@@ -199,7 +226,7 @@ def fix_borders(sheet_cells, ws_meta):
                         delete_side(cell_dict.get((cell.row_idx, cell.col_idx - 1)), 'right')
 
 
-def fix_background_color(sheet_cells):
+def fix_background_color(sheet_cells: List[List[ParsedCell]]):
     """
     In an excel, a colored background hides the default border
     """
@@ -211,7 +238,15 @@ def fix_background_color(sheet_cells):
                         delete_side(cell, side)
 
 
-def main(pathname, sheetname='Sheet1', min_row=None, max_row=None, min_col=None, max_col=None, openpyxl_kwargs=None):
+def main(
+    pathname: str,
+    sheetname: str='Sheet1',
+    min_row: int=None,
+    max_row: int=None,
+    min_col: int=None,
+    max_col: int=None,
+    openpyxl_kwargs: Dict=None
+):
     def out_of_range(bounds):
         '''bounds are of the form (left_col, top_row, right_col, bottom_row)'''
         return (bounds[0] < (min_col or 0)) or (bounds[1] < (min_row or 0))
