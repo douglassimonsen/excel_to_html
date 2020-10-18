@@ -5,12 +5,17 @@ My specific use case is sending automatic excel reports to management. Often, pe
 
 If you use Outlook and you'd like a simple tool to send automatic emails, check out another library of mine [here](https://github.com/mwhamilton/outlook_emailer)!
 
+## Choices made in Program
+* Due to the fact that my primary target is the Microsoft Outlook client, I only use CSS1 styles. You can see available CSS in the outlook client [here](https://docs.microsoft.com/en-us/previous-versions/office/developer/office-2007/aa338201(v=office.12))
+* Similarly, in order to maximize portability and to simplify the first implementation, all styles are inlined. I expect to add the option to return a seperate CSS string and to reduce styles to classes.
+* Edges cases for borders, such as a merged cell having multiple border-styles on a single edge are not replicated.
+* I assume that the default borders (the light grey lines you see on a blank sheet) should be seen. Editing `static_values.DEFAULT_BORDER` can change it to be invisible.
 
 ## Details
 The program contains a single function designed for public consumption:
 * main.main
 
-## main.main
+### main.main
 This function takes in the path to an Excel, a sheetname, and optional min/max row/column, and openpyxl_kwargs (passed to openpyxl.load_workbook)
 
 ```python
