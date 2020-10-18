@@ -11,6 +11,14 @@ def handle_color(
     themes: List[str],
     alpha: bool=False
 ):
+    """
+    handle_color parses the various subtypes of excel colors into a hex-color
+
+    Arguments:
+    color: an openpyxl color
+    themes: a list of hex-colors defined in the sheet
+    alpha: a boolean to determine whether or not to include the alpha channel
+    """
     if color is None:
         return None
     if color.type == 'indexed':
@@ -54,6 +62,16 @@ class ParsedCell:
 
     @staticmethod
     def handle_hyperlink(cell: openpyxl.styles.colors.Color):
+        """
+        handle_hyperlink parses the hyperlink target of a cell, if it exists
+
+
+        Arguments:
+        cell: an openpyxl cell
+
+        Returns:
+        A string of the hyperlink target, if it exists
+        """
         if cell.hyperlink is None:
             return None
         return cell.hyperlink.target
@@ -67,6 +85,20 @@ class ParsedCell:
         rowspan: int,
         colspan: int
     ):
+        """
+        handle_sizing uses the cell position and span to figure out the proper width and height of the cell.
+
+        Arguments:
+        cell: an openpyxl cell
+        ws_meta: A dictionary containing global values for the worksheet (themes, a list of merged_cells)
+        row_idx: an integer representing the 0-based row of the cell
+        row_idx: an integer representing the 0-based column of the cell
+        rowspan: an integer representing the rowspan of the cell
+        colspan: an integer representing the colspan of the cell
+
+        Returns:
+        a dictionary of alignment and sizing styles
+        """
         ret = {}
         width = 0
         for col in range(col_idx, col_idx + colspan):
@@ -89,6 +121,16 @@ class ParsedCell:
         cell: openpyxl.styles.colors.Color,
         ws_meta: Dict
     ):
+        """
+        handle_merged_cells uses the view window and the merged_cell_ranges to figure out the proper rowspan and colspan for a cell.
+
+        Arguments:
+        cell: an openpyxl cell
+        ws_meta: A dictionary containing global values for the worksheet (themes, a list of merged_cells)
+
+        Returns:
+        A tuple of two integers representing the (rowspan, colspan) of the cell
+        """
         def clamp_to_window(v, direction):
             return max(ws_meta[f'min_{direction}'], min(v, ws_meta[f'max_{direction}']))
         for merge_range in ws_meta['merged_cell_ranges']:
@@ -103,6 +145,16 @@ class ParsedCell:
         cell: openpyxl.styles.colors.Color,
         themes: List[str]
     ):
+        """
+        handle_font_style parses all of the styles relating to borders.
+
+        Arguments:
+        cell: an openpyxl cell
+        themes: a list of hex-colors defined in the sheet
+
+        Returns:
+        a dictionary of styles and a dicionary of which borders are default for that cell
+        """
         ret = {}
         default_border = {k: False for k in static_values.BORDER_SIDES}
         if (cell.border.top == cell.border.left) and (cell.border.left == cell.border.bottom) and (cell.border.bottom == cell.border.right):  # the borders are all the same
@@ -137,6 +189,16 @@ class ParsedCell:
         cell: openpyxl.styles.colors.Color,
         themes: List[str]
     ):
+        """
+        handle_font_style parses all of the styles relating to font and background color.
+
+        Arguments:
+        cell: an openpyxl cell
+        themes: a list of hex-colors defined in the sheet
+
+        Returns:
+        a dictionary of styles
+        """
         ret = {}
         if cell.font.i:  # italics
             ret['font-style'] = 'italic'
@@ -168,10 +230,19 @@ class ParsedCell:
         return '; '.join(style)
 
 
-def to_html(parsed_sheet: List[List[ParsedCell]]):
+def to_html(sheet_cells: List[List[ParsedCell]]):
+    """
+    Converts the parsed_sheet to an HTML table.
+
+    Arguments:
+    sheet_cells: A list of lists of cells, with each inner list representing a row
+
+    Returns:
+    a string containing the formatted HTML table
+    """
     return jinja2.Template('''
         <table style="border-collapse:collapse">
-            {%- for row in parsed_sheet -%}
+            {%- for row in sheet_cells -%}
                 <tr style="height: {{row[0].height}}">
                     {%- for cell in row -%}
                         {%- if cell.hyperlink is none -%}
@@ -183,10 +254,21 @@ def to_html(parsed_sheet: List[List[ParsedCell]]):
                 </tr>
             {%- endfor -%}
         </table>
-    ''').render(parsed_sheet=parsed_sheet, none=None)
+    ''').render(sheet_cells=sheet_cells, none=None)
 
 
-def delete_side(cell: openpyxl.styles.colors.Color, del_side: str):
+def delete_side(cell: ParsedCell, del_side: str):
+    """
+    Handles the deletion of a border of a cell. If the cell has a "border" style,
+    splits it into border-left, border-top, etc.
+
+    Argument:
+    cell: a ParsedCell
+    del_side: one of ['top', 'right', 'bottom', 'left']
+
+    Returns:
+    None
+    """
     if cell is None:  # probably a merged cell or the edge of the sheet
         return
 
@@ -202,7 +284,15 @@ def delete_side(cell: openpyxl.styles.colors.Color, del_side: str):
 
 def fix_borders(sheet_cells: List[List[ParsedCell]], ws_meta: Dict):
     """
-    makes sure that explicitly set borders are not overwritten by default borders
+    Makes sure that explicitly set borders are not overwritten by default borders.
+    Does this by deleting the overlapping default border of any adjcent cell.
+
+    Arguments:
+    sheet_cells: A list of lists of cells, with each inner list representing a row
+    ws_meta: A dictionary containing global values for the worksheet (themes, a list of merged_cells)
+
+    Returns:
+    None
     """
     cell_dict = {}
     for row in sheet_cells:
@@ -224,7 +314,15 @@ def fix_borders(sheet_cells: List[List[ParsedCell]], ws_meta: Dict):
 
 def fix_background_color(sheet_cells: List[List[ParsedCell]]):
     """
-    In an excel, a colored background hides the default border
+    In an excel, a colored background hides the default border. This function makes the
+    same thing happen for the output HTML by deleting all default borders on each cell with
+    a background color.
+
+    Arguments:
+    sheet_cells: A list of lists of cells, with each inner list representing a row
+
+    Returns:
+    None
     """
     for row in sheet_cells:
         for cell in row:
@@ -243,6 +341,18 @@ def main(
     max_col: int=None,
     openpyxl_kwargs: Dict=None
 ):
+    """
+    main is the main function. It accepts details about a excel sheet and returns an HTML table matching it.
+
+    Arguments:
+    pathname: A path to the excel sheet
+    sheetname: The name of the sheet to convert
+    min_row: The minimum row to parse in the excel (1-based)
+    max_row: The maximum row to parse in the excel (1-based)
+    min_col: The minimum column to parse in the excel (1-based)
+    max_col: The maximum column to parse in the excel (1-based)
+    openpyxl_kwargs: A dicionary of arguments to pass to openpyxl.load_workbook
+    """
     def out_of_range(bounds):
         '''bounds are of the form (left_col, top_row, right_col, bottom_row)'''
         return (bounds[0] < (min_col or 0)) or (bounds[1] < (min_row or 0))
