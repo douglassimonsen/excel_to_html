@@ -376,7 +376,7 @@ def main(
         'max_col': min(max_col or ws.max_column, ws.max_column),
     }
     parsed_sheet = []
-    candidate_merge_ranges = [x for x in ws.merged_cell_ranges if out_of_range(x.bounds)]
+    candidate_merge_ranges = [x for x in ws.merged_cells.ranges if out_of_range(x.bounds)]
     for i, row in enumerate(ws.iter_rows(min_row=min_row, max_row=max_row, min_col=min_col, max_col=max_col)):
         parsed_row = []
         for j, cell in enumerate(row):
@@ -399,9 +399,4 @@ def main(
     fix_background_color(parsed_sheet)
     fix_borders(parsed_sheet, ws_meta)
     body = to_html(parsed_sheet)
-    with open('test.html', 'w') as f:
-        f.write(body)
     return body
-
-
-main("test.xlsx", min_row=0, max_col=4)
