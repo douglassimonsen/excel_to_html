@@ -1,3 +1,5 @@
 *.pyc
 *.xlsx
 !tests/*.xlsx
+excel_to_html.egg-info/*
+*.tar.gz
