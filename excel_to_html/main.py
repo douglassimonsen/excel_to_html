@@ -1,6 +1,9 @@
+try:
+    import color_utilities
+    import static_values
+except ModuleNotFoundError:
+    from . import color_utilities, static_values
 import openpyxl
-import static_values
-import color_utilities
 import math
 import jinja2
 from typing import Dict, List
