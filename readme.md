@@ -7,6 +7,7 @@ If you use Outlook and you'd like a simple tool to send automatic emails, check 
 
 ## Installation
 `pip install excel-to-html`
+
 [Pypi](https://pypi.org/project/excel-to-html/)
 
 ## Choices made in Program
