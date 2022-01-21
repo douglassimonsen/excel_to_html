@@ -5,6 +5,10 @@ My specific use case is sending automatic excel reports to management. Often, pe
 
 If you use Outlook and you'd like a simple tool to send automatic emails, check out another library of mine [here](https://github.com/douglassimonsen/outlook_emailer)!
 
+## Installation
+`pip install excel-to-html`
+[Pypi](https://pypi.org/project/excel-to-html/)
+
 ## Choices made in Program
 * Due to the fact that my primary target is the Microsoft Outlook client, I only use CSS1 styles. You can see available CSS in the outlook client [here](https://docs.microsoft.com/en-us/previous-versions/office/developer/office-2007/aa338201(v=office.12))
 * Similarly, in order to maximize portability and to simplify the first implementation, all styles are inlined. I expect to add the option to return a seperate CSS string and to reduce styles to classes.
